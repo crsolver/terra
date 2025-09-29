@@ -1,5 +1,5 @@
 use bevy::{
-    color::palettes::css::GRAY, prelude::*, render::{
+    color::palettes::css::BLACK, prelude::*, render::{
         camera::{RenderTarget, Viewport},
         render_resource::{
             Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -8,9 +8,10 @@ use bevy::{
     }, sprite::Anchor, window::WindowResized
 };
 
-use crate::game::tilemap::{setup_map, spawn_tiles, TileMapPlugin};
+use crate::game::{player::PlayerPlugin, tilemap::{setup_map, spawn_tiles, TileMapPlugin}};
 
 mod tilemap;
+mod player;
 
 const RES_WIDTH: u32 = 320;
 const RES_HEIGHT: u32 = 180;
@@ -22,9 +23,10 @@ pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()));
-        app.add_systems(Startup, (setup_camera, setup_mesh2));
+        app.add_systems(Startup, setup_camera);
         app.add_plugins(TileMapPlugin);
         app.add_systems(Update, scale_canvas_on_resize);
+        app.add_plugins(PlayerPlugin);
     }
 }
 
@@ -122,7 +124,7 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             // Render before the "main pass" camera
             order: -1,
             target: RenderTarget::Image(image_handle.clone().into()),
-            clear_color: ClearColorConfig::Custom(GRAY.into()),
+            clear_color: ClearColorConfig::Custom(BLACK.into()),
             ..default()
         },
         Transform::from_xyz(half_width, -half_height, 0.0), // shift camera

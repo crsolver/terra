@@ -1,6 +1,8 @@
 use bevy::{color::palettes::css::{BLACK, RED}, prelude::*, sprite::Anchor};
 use rand::Rng;
 use crate::game::{OuterCamera, PixelatedCanvas, PIXEL_PERFECT_LAYERS, RES_HEIGHT, RES_WIDTH};
+use noise::{NoiseFn, Perlin, Seedable};
+
 
 const COLS: usize = 40;
 const ROWS: usize = 23;
@@ -28,10 +30,18 @@ impl TileMap {
     }
 
     pub fn get_entity_at(&self, x: usize, y: usize) -> Option<Entity> {
-        if (x >= COLS) || ( y >= ROWS) {
+        if (x > COLS) || ( y > ROWS) {
             None
         } else {
             self.entities[y][x]
+        }
+    }
+    
+    pub fn get_tile_at(&self, x: usize, y: usize) -> Option<Tile> {
+        if (x >= COLS) || ( y >= ROWS) {
+            None
+        } else {
+            self.tiles[y][x]
         }
     }
 
@@ -53,13 +63,26 @@ impl TileMap {
 
         Vec2::new(x,y)
     }
+
+    pub fn collide_at(&self, pos: Vec2) -> bool {
+        let tile_x = (pos.x / TILE_SIZE as f32).floor() as i32;
+
+        //(y as f32-(ROWS as f32)+1.) * TILE_SIZE as f32,
+        //let tile_y = ((pos.y + 0.5 * TILE_SIZE as f32) / TILE_SIZE as f32).floor() as i32 * -1.0;
+        let tile_y = ((((pos.y / TILE_SIZE as f32)).floor()) as i32) * - 1;
+
+        println!("{}, {}", tile_x, tile_y);
+        let e = self.get_tile_at(tile_x as usize, tile_y as usize);
+        e.is_some()
+    }
 }
+
 pub struct TileMapPlugin;
 
 impl Plugin for TileMapPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (setup_map, spawn_tiles).chain());
-		//app.add_systems(Update, update_tiles);
+		app.add_systems(Update, update_tiles);
     }
 }
 
@@ -72,12 +95,14 @@ pub fn setup_map(
 	let mut tilemap = TileMap::new(h_layout);
 
     let mut rng = rand::thread_rng();
+    let perlin = Perlin::new(1);
 
     for y in 0..ROWS {
         for x in 0..COLS {
-            //if (x + y) % 3 == 0 {
+            //let val = perlin.get([x as f64 * 0.15, y as f64 * 0.15, 0.15]);
+            if x == 0 || x == COLS - 1 || y == 0 || y == ROWS - 1 {
                 tilemap.set(x, y, Some(Tile { tile_index: rng.gen_range(0..12) }));
-            //}
+            }
         }
     }
 
@@ -91,13 +116,20 @@ pub fn spawn_tiles(
 ) {
 	let texture = asset_server.load("block.png");
 
+    let text_font = TextFont {
+        font: asset_server.load("MedodicaRegular.otf"),
+        font_size: 10.0,
+        ..default()
+    };
+
     for y in 0..ROWS {
         for x in 0..COLS {
             //println!("tilemap[{}][{}] = {:?}", x, y, tilemap.tiles[y][x]);
             if let Some(tile) = tilemap.getTile(x, y) {
                 let world_pos = Vec3::new(
                     x as f32 * TILE_SIZE as f32,
-                    (y as f32-(ROWS as f32)+1.) * TILE_SIZE as f32,
+                    //(y as f32-(ROWS as f32)+1.) * TILE_SIZE as f32,
+                    (y as f32 * TILE_SIZE as f32) * -1.0,
                     0.0,
                 );
 
@@ -120,6 +152,13 @@ pub fn spawn_tiles(
 				)).id();
 
 				tilemap.entities[y][x] = Some(e);
+
+                /*commands.spawn((
+                    Text2d::new(format!("({}, {})", x, y)),
+                    text_font.clone(),
+					Transform::from_xyz(world_pos.x, world_pos.y, world_pos.z),
+                    PIXEL_PERFECT_LAYERS,
+                ));*/
             }
         }
     }
@@ -142,7 +181,7 @@ fn update_tiles(
 
         // 1) window (top-left origin) -> world (center origin)
         let world_x = cursor_pos.x - win_w * 0.5;
-        let world_y =  win_h * 0.5 - cursor_pos.y;
+        let world_y = cursor_pos.y - win_h * 0.5;
 
         // 2) world -> canvas-local (canvas_transform.translation is the canvas center)
         let local_x = world_x - canvas_tf.translation.x;
@@ -158,7 +197,7 @@ fn update_tiles(
         let canvas_y = sprite_local_y + (RES_HEIGHT as f32) * 0.5;
 
         // 5) tile indices
-        let tile_x = ((canvas_x) / TILE_SIZE as f32).floor() as i32;
+        let tile_x = (canvas_x / TILE_SIZE as f32).floor() as i32;
         let tile_y = ((canvas_y + 0.5 * TILE_SIZE as f32) / TILE_SIZE as f32).floor() as i32;
 
         // --- Step 5: Clamp and update ---
