@@ -8,7 +8,8 @@ use bevy::{
     }, sprite::Anchor, window::WindowResized
 };
 
-use crate::game::{player::PlayerPlugin, tilemap::{setup_map, spawn_tiles, TileMapPlugin}};
+use crate::game::{player::{MyRoundGizmos, PlayerPlugin}, tilemap::{setup_map, spawn_tiles, TileMapPlugin}};
+use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 
 mod tilemap;
 mod player;
@@ -23,7 +24,10 @@ pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()));
+		app.init_gizmo_group::<MyRoundGizmos>();
         app.add_systems(Startup, setup_camera);
+        app.add_plugins(EguiPlugin::default());
+        app.add_plugins(WorldInspectorPlugin::new());
         app.add_plugins(TileMapPlugin);
         app.add_systems(Update, scale_canvas_on_resize);
         app.add_plugins(PlayerPlugin);
@@ -40,8 +44,6 @@ struct InGameCamera;
 /// Camera that renders the [`Canvas`] (and other graphics on [`HIGH_RES_LAYERS`]) to the screen.
 #[derive(Component)]
 struct OuterCamera;
-
-
 
 /// Spawns a capsule mesh on the pixel-perfect layer.
 fn setup_mesh(
@@ -85,6 +87,9 @@ fn setup_mesh2(
     ));
 }
 
+#[derive(Component)]
+struct EguiCamera;
+
 fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let canvas_size = Extent3d {
         width: RES_WIDTH,
@@ -117,8 +122,21 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let half_width = (RES_WIDTH as f32) / 2.0;
     let half_height = (RES_HEIGHT as f32) / 2.0;
 
-    // This camera renders whatever is on `PIXEL_PERFECT_LAYERS` to the canvas
+    // The "outer" camera renders whatever is on `HIGH_RES_LAYERS` to the screen.
+    // here, the canvas and one of the sample sprites will be rendered by this camera
     commands.spawn((
+        Camera2d, 
+        Camera {
+            order: 0,
+            ..default()
+        },
+        Msaa::Off, 
+        OuterCamera, 
+        HIGH_RES_LAYERS
+    ));
+
+    // This camera renders whatever is on `PIXEL_PERFECT_LAYERS` to the canvas
+   commands.spawn((
         Camera2d,
         Camera {
             // Render before the "main pass" camera
@@ -145,9 +163,6 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         HIGH_RES_LAYERS
     ));
 
-    // The "outer" camera renders whatever is on `HIGH_RES_LAYERS` to the screen.
-    // here, the canvas and one of the sample sprites will be rendered by this camera
-    commands.spawn((Camera2d, Msaa::Off, OuterCamera, HIGH_RES_LAYERS));
 }
 
 fn scale_canvas_on_resize(
