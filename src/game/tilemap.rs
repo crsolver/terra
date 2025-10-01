@@ -1,20 +1,22 @@
-use noise::{NoiseFn, Perlin, Seedable};
-use bevy::{color::palettes::css::{BLACK, RED}, prelude::*, sprite::Anchor};
+use bevy::{color::palettes::css::{BLACK, RED, WHITE}, prelude::*, sprite::Anchor};
+use noise::{NoiseFn, Perlin};
 use rand::Rng;
 use crate::game::{player::{draw_point, draw_point_red}, OuterCamera, PixelatedCanvas, PIXEL_PERFECT_LAYERS, RES_HEIGHT, RES_WIDTH};
 use crate::game::player::{Player};
 
 
-const COLS: usize = 40;
-const ROWS: usize = 23;
-const TILE_SIZE: u32 = 8;
+pub const TCOLS: usize = 40;
+pub const TROWS: usize = 23;
+pub const COLS: usize = 38;//40;
+pub const ROWS: usize = 21;//23;
+pub const TILE_SIZE: u32 = 8;
 
 pub struct TileMapPlugin;
 
 impl Plugin for TileMapPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (setup_map, spawn_tiles).chain());
-		app.add_systems(Update, (move_world, update_tiles));
+		app.add_systems(Update, update_tiles);
     }
 }
 
@@ -25,8 +27,8 @@ pub struct Tile {
 
 #[derive(Resource)]
 pub struct TileMap {
-    pub tiles: [[Option<Tile>; COLS]; ROWS],
-    pub entities: [[Option<Entity>; COLS]; ROWS],
+    pub tiles: [[Option<Tile>; TCOLS]; TROWS],
+    pub entities: [[Option<Entity>; TCOLS]; TROWS],
 	pub layout: Handle<TextureAtlasLayout>,
     pub position: Vec2,
 }
@@ -34,8 +36,8 @@ pub struct TileMap {
 impl TileMap {
     pub fn new(layout: Handle<TextureAtlasLayout>) -> Self {
         Self {
-            tiles: [[None; COLS]; ROWS],
-            entities: [[None; COLS]; ROWS],
+            tiles: [[None; TCOLS]; TROWS],
+            entities: [[None; TCOLS]; TROWS],
 			layout,
             position: Vec2::ZERO,
         }
@@ -50,7 +52,7 @@ impl TileMap {
     }
     
     pub fn get_tile_at(&self, x: usize, y: usize) -> Option<Tile> {
-        if (x >= COLS) || ( y >= ROWS) {
+        if (x >= TCOLS) || ( y >= TROWS) {
             None
         } else {
             self.tiles[y][x]
@@ -101,14 +103,14 @@ pub fn setup_map(
     let mut rng = rand::thread_rng();
     let perlin = Perlin::new(1);
 
-    for y in 0..ROWS {
-        for x in 0..COLS {
-            let gx = (tilemap.position.x * 40. + x as f32) as f64 * 0.1;
-            let gy = (tilemap.position.y * 23. + y as f32) as f64 * 0.1;
+    for y in -1..=(ROWS as i32) {
+        for x in -1..=(COLS as i32) {
+            let gx = (tilemap.position.x * 39. + x as f32) as f64 * 0.1;
+            let gy = (tilemap.position.y * 22. + y as f32) as f64 * 0.1;
             let val = perlin.get([gx, gy, 0.1]);
 
             if val > 0.3 {
-                tilemap.set(x, y, Some(Tile { tile_index: rng.gen_range(0..12) }));
+                tilemap.set((x+1) as usize, (y+1) as usize, Some(Tile { tile_index: rng.gen_range(0..12) }));
             }
         }
     }
@@ -116,89 +118,67 @@ pub fn setup_map(
 	commands.insert_resource(tilemap);
 }
 
-pub fn move_world(
-    mut commands: Commands,
-    mut tilemap: ResMut<TileMap>,
-    mut player_query: Query<&mut Transform, With<Player>>,
-    asset_server: Res<AssetServer>,
+fn update_tiles(
+    //camera_query: Single<(&Camera, &GlobalTransform)>,
+    tilemap: ResMut<TileMap>,
+    mut sprites: Query<&mut Sprite, Without<PixelatedCanvas>>,
+    window: Single<&Window>,
+    canvas_query: Query<(&Transform, &Sprite), With<PixelatedCanvas>>,
+	mut gizmos: Gizmos,
 ) {
-	let mut dir = Vec2::ZERO;
+    if let Some(cursor_pos) = window.cursor_position()
+    {
+        let (canvas_tf, _canvas_sprite) = canvas_query.single().unwrap();
 
-    let mut transform = player_query.single_mut().unwrap();
-    let player_pos = transform.translation;
-	if player_pos.x >= 39.0 * TILE_SIZE as f32 {
-        dir.x = 1.;
-        transform.translation.x = 0.;
-    } else if player_pos.x == 0. {
-        dir.x = -1.;
-        transform.translation.x = 39.* TILE_SIZE as f32 ;
-    }
-    if player_pos.y < -(23. * TILE_SIZE as f32) {
-        dir.y = 1.;
-        transform.translation.y = 0.;
-    } else if player_pos.y >= 0. {
-        dir.y = -1.;
-        transform.translation.y = -23.* TILE_SIZE as f32 ;
-    }
-    
-    if dir.x == 0. && dir.y == 0. {
-        return;
-    }
+        // cursor_pos is top-left origin
+        let win_w = window.width() as f32;
+        let win_h = window.height() as f32;
 
-    tilemap.position += dir;
+        // 1) window (top-left origin) -> world (center origin)
+        let world_x = cursor_pos.x - win_w * 0.5;
+        let world_y = cursor_pos.y - win_h * 0.5;
 
-    let mut rng = rand::thread_rng();
-    let perlin = Perlin::new(1);
-	let texture = asset_server.load("block.png");
 
-    for y in 0..ROWS {
-        for x in 0..COLS {
-            let maybe_ent = tilemap.entities[y][x];
-            if let Some(ent) = maybe_ent {
-                commands.entity(ent).despawn();
-                tilemap.entities[y][x] = None;
-            }
+        // 2) world -> canvas-local (canvas_transform.translation is the canvas center)
+        let local_x = world_x - canvas_tf.translation.x;
+        let local_y = world_y - canvas_tf.translation.y;
 
-            let gx = (tilemap.position.x * 40. + x as f32) as f64 * 0.1;
-            let gy = (tilemap.position.y * 23. + y as f32) as f64 * 0.1;
-            let val = perlin.get([gx, gy, 0.1]);
 
-            if val > 0.2 {
-                let tile = Tile { tile_index: rng.gen_range(0..12) };
-                tilemap.set(x, y, Some(tile));
-                let world_pos = Vec3::new(
-                    x as f32 * TILE_SIZE as f32,
-                    //(y as f32-(ROWS as f32)+1.) * TILE_SIZE as f32,
-                    (y as f32 * TILE_SIZE as f32) * -1.0,
-                    0.0,
-                );
+        // 3) undo canvas scale (assumes uniform scale)
+        let scale = canvas_tf.scale.x.max(1e-6);
+        let sprite_local_x = local_x / scale;
+        let sprite_local_y = local_y / scale;
 
-				let mut sprite = Sprite {
-					image: texture.clone(),
-					texture_atlas: Some(TextureAtlas {
-						layout: tilemap.layout.clone(),
-						index: tile.tile_index,
-					}),
-					..Default::default()
-				};
+        // 4) sprite-local -> canvas pixel coords (top-left origin)
+        let canvas_x = sprite_local_x + (RES_WIDTH as f32) * 0.5;
+        let canvas_y = sprite_local_y + (RES_HEIGHT as f32) * 0.5;
 
-				sprite.anchor = Anchor::TopLeft;
+        draw_point(&mut gizmos, Vec3::new(canvas_x, canvas_y*-1., 0.));
+        gizmos.rect_2d(    
+            Isometry2d::new(Vec2::new((RES_WIDTH as f32) * 0.5, - (RES_HEIGHT as f32) * 0.5), Rot2::radians(0.)), 
+            Vec2::new(38.*8., 21.*8.), 
+            WHITE 
+	    );
+        // 5) tile indices
+        let tile_x = (canvas_x / TILE_SIZE as f32).floor() as i32;
+        let tile_y = ((canvas_y * TILE_SIZE as f32) / TILE_SIZE as f32).floor() as i32;
 
-                // print the worldpos
-				let e = commands.spawn((
-					sprite,
-					Transform::from_xyz(world_pos.x, world_pos.y, world_pos.z),
-					PIXEL_PERFECT_LAYERS,
-				)).id();
 
-                tilemap.entities[y][x] = Some(e);
-            } else {
-                tilemap.set(x,y, None);
+        // --- Step 5: Clamp and update ---
+        //if tile_x >= 0 && tile_x < COLS as i32 && tile_y >= 0 && tile_y < ROWS as i32 {
+        if tilemap.collide_at(Vec2::new(canvas_x, canvas_y*-1.0)) {
+            draw_point_red(&mut gizmos, Vec3::new(canvas_x, canvas_y*-1., 0.));
+            if let Some(ent) = tilemap.get_entity_at(tile_x as usize, tile_y as usize) {
+                if let Ok(mut sprite) = sprites.get_mut(ent) {
+                    if let Some(at) = &mut sprite.texture_atlas {
+                        // Toggle tile index
+                        at.index = 1;
+                    }
+                }
             }
         }
     }
 }
-
 pub fn spawn_tiles(
     mut commands: Commands,
     mut tilemap: ResMut<TileMap>,
@@ -212,8 +192,8 @@ pub fn spawn_tiles(
         ..default()
     };
 
-    for y in 0..ROWS {
-        for x in 0..COLS {
+    for y in 0..TROWS {
+        for x in 0..TCOLS {
             //println!("tilemap[{}][{}] = {:?}", x, y, tilemap.tiles[y][x]);
             if let Some(tile) = tilemap.getTile(x, y) {
                 let world_pos = Vec3::new(
@@ -254,60 +234,3 @@ pub fn spawn_tiles(
     }
 }
 
-fn update_tiles(
-    //camera_query: Single<(&Camera, &GlobalTransform)>,
-    tilemap: ResMut<TileMap>,
-    mut sprites: Query<&mut Sprite, Without<PixelatedCanvas>>,
-    window: Single<&Window>,
-    canvas_query: Query<(&Transform, &Sprite), With<PixelatedCanvas>>,
-	mut gizmos: Gizmos,
-) {
-    if let Some(cursor_pos) = window.cursor_position()
-    {
-        let (canvas_tf, _canvas_sprite) = canvas_query.single().unwrap();
-
-        // cursor_pos is top-left origin
-        let win_w = window.width() as f32;
-        let win_h = window.height() as f32;
-
-        // 1) window (top-left origin) -> world (center origin)
-        let world_x = cursor_pos.x - win_w * 0.5;
-        let world_y = cursor_pos.y - win_h * 0.5;
-
-
-        // 2) world -> canvas-local (canvas_transform.translation is the canvas center)
-        let local_x = world_x - canvas_tf.translation.x;
-        let local_y = world_y - canvas_tf.translation.y;
-
-
-        // 3) undo canvas scale (assumes uniform scale)
-        let scale = canvas_tf.scale.x.max(1e-6);
-        let sprite_local_x = local_x / scale;
-        let sprite_local_y = local_y / scale;
-
-        // 4) sprite-local -> canvas pixel coords (top-left origin)
-        let canvas_x = sprite_local_x + (RES_WIDTH as f32) * 0.5;
-        let canvas_y = sprite_local_y + (RES_HEIGHT as f32) * 0.5;
-
-        draw_point(&mut gizmos, Vec3::new(canvas_x, canvas_y*-1., 0.));
-
-        // 5) tile indices
-        let tile_x = (canvas_x / TILE_SIZE as f32).floor() as i32;
-        let tile_y = ((canvas_y * TILE_SIZE as f32) / TILE_SIZE as f32).floor() as i32;
-
-
-        // --- Step 5: Clamp and update ---
-        //if tile_x >= 0 && tile_x < COLS as i32 && tile_y >= 0 && tile_y < ROWS as i32 {
-        if tilemap.collide_at(Vec2::new(canvas_x, canvas_y*-1.0)) {
-            draw_point_red(&mut gizmos, Vec3::new(canvas_x, canvas_y*-1., 0.));
-            if let Some(ent) = tilemap.get_entity_at(tile_x as usize, tile_y as usize) {
-                if let Ok(mut sprite) = sprites.get_mut(ent) {
-                    if let Some(at) = &mut sprite.texture_atlas {
-                        // Toggle tile index
-                        at.index = 1;
-                    }
-                }
-            }
-        }
-    }
-}

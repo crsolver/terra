@@ -26,8 +26,8 @@ impl Plugin for GamePlugin {
         app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()));
 		app.init_gizmo_group::<MyRoundGizmos>();
         app.add_systems(Startup, setup_camera);
-        app.add_plugins(EguiPlugin::default());
-        app.add_plugins(WorldInspectorPlugin::new());
+        //app.add_plugins(EguiPlugin::default());
+        //app.add_plugins(WorldInspectorPlugin::new());
         app.add_plugins(TileMapPlugin);
         app.add_systems(Update, scale_canvas_on_resize);
         app.add_plugins(PlayerPlugin);
