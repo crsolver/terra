@@ -155,7 +155,7 @@ fn update_tiles(
 
         draw_point(&mut gizmos, Vec3::new(canvas_x, canvas_y*-1., 0.));
         gizmos.rect_2d(    
-            Isometry2d::new(Vec2::new((RES_WIDTH as f32) * 0.5, - (RES_HEIGHT as f32) * 0.5), Rot2::radians(0.)), 
+            Isometry2d::new(Vec2::new((RES_WIDTH as f32) * 0.5, - (RES_HEIGHT as f32) * 0.5) - 1., Rot2::radians(0.)), 
             Vec2::new(38.*8., 21.*8.), 
             WHITE 
 	    );

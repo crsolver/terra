@@ -54,7 +54,6 @@ fn update_player(
 	let mut player_pos = transform.translation;
 	let mut offset = Vec2::ZERO;
 	let mut dir = Vec2::ZERO;
-	
 
 	if keyboard_input.pressed(KeyCode::KeyD) {
 		dir.x = 1.;
@@ -62,13 +61,6 @@ fn update_player(
     }
 	if keyboard_input.pressed(KeyCode::KeyA) {
 		dir.x = -1.;
-    }
-	if keyboard_input.pressed(KeyCode::KeyW) {
-		//dir.y = 1.;
-    }
-	if keyboard_input.pressed(KeyCode::KeyS) {
-		//dir.y = -1.;
-		//offset.y = 8.;
     }
 
 	player.velocity.x = dir.x * player.speed;
@@ -79,8 +71,8 @@ fn update_player(
 	
     player.velocity.y += gravity * dt;
 
-	 // --- Jump ---
-    if player.on_ground && keyboard_input.just_pressed(KeyCode::Space) {
+	 // --- Jump --- 
+    if  player.on_ground && keyboard_input.just_pressed(KeyCode::Space) {
         player.velocity.y = 300.0; // jump strength
 		player.on_ground = false;
 		println!("_______________________________________________________")
@@ -108,7 +100,7 @@ fn update_player(
 		//draw_point(&mut gizmos,Vec3::new(player_pos.x + signx + offset.x, player_pos.y + signy, 0.));
 		//draw_point(&mut gizmos,Vec3::new(player_pos.x + signx + offset.x, player_pos.y + signy + -8., 0.));
 		while mov.x != 0. {
-			if !tilemap.collide_at(Vec2::new(player_pos.x + signx + offset.x, player_pos.y)) &&
+			if !tilemap.collide_at(Vec2::new(player_pos.x + signx + offset.x , player_pos.y)) &&
 				!tilemap.collide_at(Vec2::new(player_pos.x + signx + offset.x, player_pos.y + -8.))
 			{
 				player_pos.x += signx;
@@ -192,7 +184,7 @@ pub fn move_world(
 		if  player.velocity.y > 0. && player_pos.y > -8. { // no conflicto
             dir.y = -1.;
             transform.translation.y -= chunk_height;
-        } else if player.velocity.y < 0. && (player_pos.y) <= -chunk_height { // correct
+        } else if player.velocity.y < 0. && (player_pos.y -8.) <= -chunk_height -1. { // correct
             dir.y = 1.;
             transform.translation.y += chunk_height;
         }
@@ -205,23 +197,24 @@ pub fn move_world(
             transform.translation.x += chunk_width;
         }
 
-		if player_pos.y - 8. > 0. { // derecha
+		if player_pos.y - 8. > 0. { // up
             dir.y = -1.;
             transform.translation.y -= chunk_height;
-        } else if player_pos.y < -chunk_height { // no confilto
+        } else if player_pos.y <= -chunk_height - 8. { // no confilto
             dir.y = 1.;
             transform.translation.y += chunk_height;
         }
     }
+
     player_pos = transform.translation;
     player.inside = player_pos.x >= 8. && player_pos.x < 39.0 * TILE_SIZE as f32 &&
 					player_pos.y <= -8. && player_pos.y > -22.0 * TILE_SIZE as f32;
 
-    if player.inside {
+    /*if player.inside {
 		draw_point(&mut gizmos,Vec3::new(player_pos.x, player_pos.y, 0.));
     } else {
 		draw_point_red(&mut gizmos,Vec3::new(player_pos.x, player_pos.y, 0.));
-    }
+    }*/
     
     if dir.x == 0. && dir.y == 0. {
         return;
@@ -235,7 +228,6 @@ pub fn move_world(
 
     let gx1 = (tilemap.position.x * 40. -1.) as f64 * 0.1;
     let gx2 = (tilemap.position.x * 40. + COLS as f32) as f64 * 0.1;
-	println!("{}..{}", gx1, gx2);
 
     for y in -1..=(ROWS as i32) {
         for x in -1..=(COLS as i32) {
